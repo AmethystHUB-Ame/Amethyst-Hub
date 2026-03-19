@@ -1,39 +1,43 @@
--- [[ AMETHYST HUB - REMOTE DATABASE ]] --
+-- [[ AMETHYST HUB - DYNAMIC DATABASE ]] --
 return {
-    ["Main Scripts"] = {
+    -- 1. SECTION: AmethystHUB Main
+    ["AmethystHUB Main"] = {
         {
             ["Name"] = "Amethyst Ultimate V3",
             ["URL"] = "https://raw.githubusercontent.com/Username/Repo/main/Scripts/Amethyst_V3.lua",
-            ["Description"] = "Script paling lengkap: Aimbot, ESP, & AntiLag."
+            ["Description"] = "Menu Universal: Aimbot, ESP, & Omega AntiLag."
         },
         {
-            ["Name"] = "Amethyst Anti-Lag (Lite)",
+            ["Name"] = "Amethyst Lite (FPS)",
             ["URL"] = "https://raw.githubusercontent.com/Username/Repo/main/Scripts/AntiLag_2025.lua",
-            ["Description"] = "Hanya fungsi optimasi FPS untuk peranti low-end."
+            ["Description"] = "Khusus untuk kurangkan lag dan naikkan FPS."
         }
     },
 
-    -- Kategori 2: Script Popular (Universal)
-    ["Universal Scripts"] = {
+    -- 2. SECTION: AmethystHUB Game
+    ["AmethystHUB Game"] = {
         {
-            ["Name"] = "Infinite Yield",
-            ["URL"] = "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source",
-            ["Description"] = "Admin commands paling popular."
+            ["Name"] = "Blox Fruits",
+            ["URL"] = "URL_RAW_BLOXY",
+            ["Description"] = "Auto Farm, Sea Events, & Fruit Notifier."
         },
         {
-            ["Name"] = "SimpleSpy V3",
-            ["URL"] = "https://raw.githubusercontent.com/78n/SimpleSpy/main/SimpleSpySource.lua",
-            ["Description"] = "Alat untuk scripter melihat RemoteEvents."
+            ["Name"] = "Pet Simulator 99",
+            ["URL"] = "URL_RAW_PETSIM",
+            ["Description"] = "Auto Collect, Auto Hatch, & Rank Up."
         },
         {
-            ["Name"] = "Dark Dex V3",
-            ["URL"] = "https://raw.githubusercontent.com/infyiff/backup/main/dex.lua",
-            ["Description"] = "Explorer untuk melihat fail dalam game."
+            ["Name"] = "Brookhaven",
+            ["URL"] = "URL_RAW_BROOK",
+            ["Description"] = "Unlock All Gamepasses & Trolls."
+        },
+        {
+            ["Name"] = "Bedwars",
+            ["URL"] = "URL_RAW_BEDWARS",
+            ["Description"] = "Infinite Reach, Kill Aura, & Fly."
         }
-    },
-
-    -- Kategori 3: Script Mengikut Game (Game Specific)
-    ["Game Scripts"] = {
+    }
+}
         {
             ["Name"] = "Blox Fruits Helper",
             ["URL"] = "LETAK_LINK_RAW_DI_SINI",
