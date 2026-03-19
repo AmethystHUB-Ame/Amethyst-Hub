@@ -1,8 +1,5 @@
 -- [[ AMETHYST HUB - REMOTE DATABASE ]] --
--- Fail ini menyimpan senarai menu script untuk Hub kau.
-
 return {
-    -- Kategori 1: Script Utama Kau (Amethyst Series)
     ["Main Scripts"] = {
         {
             ["Name"] = "Amethyst Ultimate V3",
