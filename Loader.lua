@@ -1,118 +1,85 @@
---[[
-    ╔══════════════════════════════════════════════════════════════╗
-    ║               AMETHYST HUB LOADER v4.0 (FIXED)               ║
-    ╚══════════════════════════════════════════════════════════════╝
-]]
+-- [[ AMETHYST HUB - STABLE LOADER ]] --
 
--- 1. ANTI-DOUBLE LOAD
-if getgenv().AmethystLoaded then
-    warn("[Amethyst Hub] Already loaded!")
-    return
-end
-getgenv().AmethystLoaded = true
+-- 1. Reset Guard
+getgenv().AmethystLoaded = false
 
--- 2. CONFIGURATION (GANTI LINK DI BAWAH INI)
+-- 2. Configuration
 local DATABASE_URL = "https://raw.githubusercontent.com/AmethystHUB-Ame/Amethyst-Hub/main/Database.lua"
 
--- 3. SERVICES
-local HttpService = game:GetService("HttpService")
+-- 3. Load Rayfield Library
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- 4. FETCH DATABASE
-print("Amethyst: Fetching Database...")
+-- 4. Fetch Database
 local success, result = pcall(function()
     return loadstring(game:HttpGet(DATABASE_URL))()
 end)
 
 if not success or type(result) ~= "table" then
-    getgenv().AmethystLoaded = false
-    warn("Amethyst Fatal Error: Gagal ambil Database! Link Raw mungkin salah.")
+    warn("AMETHYST: Gagal load Database! Check link GitHub kau.")
     return
 end
 
--- 5. CREATE WINDOW
+-- 5. Create Window
 local Window = Rayfield:CreateWindow({
     Name = "Amethyst Hub | v4.0",
-    LoadingTitle = "💎 AMETHYST HUB",
-    LoadingSubtitle = "by Amethyst Team",
+    LoadingTitle = "Amethyst Hub Loading...",
+    LoadingSubtitle = "Please wait",
     ConfigurationSaving = { Enabled = false },
     KeySystem = false
 })
 
--- 6. TAB: MAIN SCRIPTS
+-- 6. Tab: Main Scripts
 local MainTab = Window:CreateTab("Main Scripts", "home")
-MainTab:CreateSection("AmethystHUB Main")
 
 if result["AmethystHUB Main"] then
-    for _, scriptData in pairs(result["AmethystHUB Main"]) do
+    for _, data in pairs(result["AmethystHUB Main"]) do
         MainTab:CreateButton({
-            Name = scriptData.Name,
+            Name = data.Name,
             Callback = function()
                 Rayfield:Notify({
-                    Title = "Executing: " .. scriptData.Name,
-                    Content = scriptData.Description,
+                    Title = "Executing...",
+                    Content = data.Description,
                     Duration = 3,
                     Image = "play"
                 })
-                loadstring(game:HttpGet(scriptData.URL))()
+                loadstring(game:HttpGet(data.URL))()
             end,
         })
     end
 end
 
--- 7. TAB: GAME SCRIPTS (DROPDOWN)
+-- 7. Tab: Game Scripts
 local GameTab = Window:CreateTab("Game Scripts", "gamepad-2")
-GameTab:CreateSection("AmethystHUB Game")
-
 local gameList = {}
 local gameMap = {}
 
 if result["AmethystHUB Game"] then
-    for _, scriptData in pairs(result["AmethystHUB Game"]) do
-        table.insert(gameList, scriptData.Name)
-        gameMap[scriptData.Name] = scriptData
+    for _, data in pairs(result["AmethystHUB Game"]) do
+        table.insert(gameList, data.Name)
+        gameMap[data.Name] = data
     end
 end
 
 local selectedGame = nil
-
-local Dropdown = GameTab:CreateDropdown({
-    Name = "Select a Game",
+GameTab:CreateDropdown({
+    Name = "Select Game",
     Options = gameList,
     CurrentOption = {"None"},
     MultipleOptions = false,
-    Flag = "GameDropdown",
     Callback = function(Option)
         selectedGame = Option[1]
     end,
 })
 
 GameTab:CreateButton({
-    Name = "🚀 Execute Selected Game",
+    Name = "Execute Selected",
     Callback = function()
         if selectedGame and gameMap[selectedGame] then
-            local data = gameMap[selectedGame]
-            Rayfield:Notify({
-                Title = "Loading " .. data.Name,
-                Content = data.Description,
-                Duration = 3,
-                Image = "download"
-            })
-            loadstring(game:HttpGet(data.URL))()
+            loadstring(game:HttpGet(gameMap[selectedGame].URL))()
         else
-            Rayfield:Notify({
-                Title = "Error",
-                Content = "Sila pilih game dari dropdown dulu!",
-                Duration = 3,
-                Image = "alert-circle"
-            })
+            Rayfield:Notify({Title = "Error", Content = "Pilih game dulu!", Duration = 2})
         end
     end,
 })
 
-Rayfield:Notify({
-    Title = "Amethyst Loaded!",
-    Content = "Database Berjaya Diambil.",
-    Duration = 5,
-    Image = "check-circle",
-})
+print("Amethyst Hub: Successfully Loaded!")
