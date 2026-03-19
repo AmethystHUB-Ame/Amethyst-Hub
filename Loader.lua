@@ -1,647 +1,79 @@
 --[[
-    ╔══════════════════════════════════════════════════════════════╗
-    ║               AMETHYST HUB LOADER v3.0                      ║
-    ║          Professional Dynamic Hub with Rayfield UI           ║
-    ║                                                              ║
-    ║  Features:                                                   ║
-    ║   • Animated splash screen with Amethyst branding            ║
-    ║   • Remote database fetch from GitHub                        ║
-    ║   • Dynamic script gallery built from database categories    ║
-    ║   • Custom URL executor                                      ║
-    ║   • Mobile-friendly (Delta/Fluxus compatible)                ║
-    ║   • Anti-double-load protection                              ║
-    ╚══════════════════════════════════════════════════════════════╝
---]]
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 0: ANTI-DOUBLE LOAD GUARD
--- Prevents the hub from initializing more than once per session.
--- ══════════════════════════════════════════════════════════════
-
-if getgenv().AmethystLoaded then
-    warn("[Amethyst Hub] Already loaded this session. Aborting duplicate execution.")
-    return
-end
-getgenv().AmethystLoaded = true
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 1: SERVICE REFERENCES & CONSTANTS
--- ══════════════════════════════════════════════════════════════
-
-local Players        = game:GetService("Players")
-local TweenService   = game:GetService("TweenService")
-local RunService     = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local CoreGui        = game:GetService("CoreGui")
-
-local LocalPlayer    = Players.LocalPlayer
-local PlayerName     = LocalPlayer and LocalPlayer.Name or "Player"
-
--- Amethyst colour palette
-local COLORS = {
-    Background     = Color3.fromRGB(35, 10, 50),       -- Deep Amethyst
-    Outline        = Color3.fromRGB(180, 100, 255),     -- Lavender glow
-    OutlineGlow    = Color3.fromRGB(200, 140, 255),     -- Brighter lavender pulse
-    BarBackground  = Color3.fromRGB(55, 20, 75),        -- Muted purple
-    BarFill        = Color3.fromRGB(180, 100, 255),     -- Lavender
-    TextPrimary    = Color3.fromRGB(230, 200, 255),     -- Light lavender text
-    TextSecondary  = Color3.fromRGB(150, 120, 180),     -- Dimmer text
-    White          = Color3.fromRGB(255, 255, 255),
-    Transparent    = Color3.fromRGB(0, 0, 0),
-}
-
--- Database URL
-local DATABASE_URL = "https://raw.githubusercontent.com/AmethystHUB-Ame/Amethyst-Hub/1df06addbd9f8906c80707c4e8476e4aa914988b/Database.lua"
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 2: UTILITY HELPERS
--- ══════════════════════════════════════════════════════════════
-
---- Safely creates a tween and plays it, returning the Tween object.
-local function tweenPlay(instance, tweenInfo, properties)
-    local tween = TweenService:Create(instance, tweenInfo, properties)
-    tween:Play()
-    return tween
-end
-
---- Waits for a tween to complete.
-local function tweenAndWait(instance, tweenInfo, properties)
-    local tween = tweenPlay(instance, tweenInfo, properties)
-    tween.Completed:Wait()
-    return tween
-end
-
---- Creates a rounded UICorner parented to the given instance.
-local function addCorner(parent, radius)
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, radius or 12)
-    corner.Parent = parent
-    return corner
-end
-
---- Creates a UIStroke for glowing outlines.
-local function addStroke(parent, color, thickness, transparency)
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = color or COLORS.Outline
-    stroke.Thickness = thickness or 2
-    stroke.Transparency = transparency or 0
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    stroke.Parent = parent
-    return stroke
-end
-
---- Creates a UIPadding helper.
-local function addPadding(parent, top, bottom, left, right)
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop    = UDim.new(0, top or 0)
-    pad.PaddingBottom = UDim.new(0, bottom or 0)
-    pad.PaddingLeft   = UDim.new(0, left or 0)
-    pad.PaddingRight  = UDim.new(0, right or 0)
-    pad.Parent = parent
-    return pad
-end
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 3: SPLASH SCREEN
--- The "Amethyst Signature" animated loading screen.
--- ══════════════════════════════════════════════════════════════
-
-local SplashGui = Instance.new("ScreenGui")
-SplashGui.Name = "AmethystSplash"
-SplashGui.ResetOnSpawn = false
-SplashGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-SplashGui.IgnoreGuiInset = true
-SplashGui.DisplayOrder = 999
-
--- Try CoreGui first (works on most executors), fall back to PlayerGui
-local guiParent = (syn and syn.protect_gui and CoreGui)
-    or (gethui and gethui())
-    or CoreGui
-
-local splashParentOk = pcall(function()
-    SplashGui.Parent = guiParent
-end)
-if not splashParentOk then
-    SplashGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-end
-
--- Semi-transparent background overlay
-local Overlay = Instance.new("Frame")
-Overlay.Name = "Overlay"
-Overlay.Size = UDim2.new(1, 0, 1, 0)
-Overlay.BackgroundColor3 = Color3.fromRGB(10, 2, 15)
-Overlay.BackgroundTransparency = 0.3
-Overlay.BorderSizePixel = 0
-Overlay.Parent = SplashGui
-
--- Main splash card (centered, rounded, initially invisible)
-local SplashCard = Instance.new("Frame")
-SplashCard.Name = "SplashCard"
-SplashCard.AnchorPoint = Vector2.new(0.5, 0.5)
-SplashCard.Position = UDim2.new(0.5, 0, 0.5, 0)
-SplashCard.Size = UDim2.new(0, 360, 0, 200)
-SplashCard.BackgroundColor3 = COLORS.Background
-SplashCard.BackgroundTransparency = 1
-SplashCard.BorderSizePixel = 0
-SplashCard.Parent = SplashGui
-
-addCorner(SplashCard, 16)
-local splashStroke = addStroke(SplashCard, COLORS.Outline, 2.5, 1)
-
--- Logo / Title Text
-local LogoText = Instance.new("TextLabel")
-LogoText.Name = "LogoText"
-LogoText.AnchorPoint = Vector2.new(0.5, 0)
-LogoText.Position = UDim2.new(0.5, 0, 0.12, 0)
-LogoText.Size = UDim2.new(0.9, 0, 0, 40)
-LogoText.BackgroundTransparency = 1
-LogoText.Text = "💎 Amethyst Hub"
-LogoText.TextColor3 = COLORS.Outline
-LogoText.TextTransparency = 1
-LogoText.Font = Enum.Font.GothamBold
-LogoText.TextSize = 28
-LogoText.TextScaled = false
-LogoText.Parent = SplashCard
-
--- Status text (below logo)
-local StatusText = Instance.new("TextLabel")
-StatusText.Name = "StatusText"
-StatusText.AnchorPoint = Vector2.new(0.5, 0)
-StatusText.Position = UDim2.new(0.5, 0, 0.42, 0)
-StatusText.Size = UDim2.new(0.85, 0, 0, 22)
-StatusText.BackgroundTransparency = 1
-StatusText.Text = ""
-StatusText.TextColor3 = COLORS.TextSecondary
-StatusText.TextTransparency = 1
-StatusText.Font = Enum.Font.Gotham
-StatusText.TextSize = 14
-StatusText.Parent = SplashCard
-
--- Loading bar background
-local BarBG = Instance.new("Frame")
-BarBG.Name = "BarBG"
-BarBG.AnchorPoint = Vector2.new(0.5, 0)
-BarBG.Position = UDim2.new(0.5, 0, 0.72, 0)
-BarBG.Size = UDim2.new(0.75, 0, 0, 8)
-BarBG.BackgroundColor3 = COLORS.BarBackground
-BarBG.BackgroundTransparency = 1
-BarBG.BorderSizePixel = 0
-BarBG.Parent = SplashCard
-
-addCorner(BarBG, 4)
-
--- Loading bar fill
-local BarFill = Instance.new("Frame")
-BarFill.Name = "BarFill"
-BarFill.Size = UDim2.new(0, 0, 1, 0)
-BarFill.BackgroundColor3 = COLORS.BarFill
-BarFill.BackgroundTransparency = 1
-BarFill.BorderSizePixel = 0
-BarFill.Parent = BarBG
-
-addCorner(BarFill, 4)
-
--- Version tag at the bottom of the card
-local VersionLabel = Instance.new("TextLabel")
-VersionLabel.Name = "Version"
-VersionLabel.AnchorPoint = Vector2.new(0.5, 1)
-VersionLabel.Position = UDim2.new(0.5, 0, 0.95, 0)
-VersionLabel.Size = UDim2.new(0.5, 0, 0, 14)
-VersionLabel.BackgroundTransparency = 1
-VersionLabel.Text = "v3.0"
-VersionLabel.TextColor3 = COLORS.TextSecondary
-VersionLabel.TextTransparency = 1
-VersionLabel.Font = Enum.Font.Gotham
-VersionLabel.TextSize = 11
-VersionLabel.Parent = SplashCard
-
--- ── Splash Animation Sequence ──
-
-local fastTween  = TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-local medTween   = TweenInfo.new(0.6,  Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-local barTween   = TweenInfo.new(0.5,  Enum.EasingStyle.Sine,  Enum.EasingDirection.InOut)
-local pulseTween = TweenInfo.new(1.2,  Enum.EasingStyle.Sine,  Enum.EasingDirection.InOut, -1, true)
-
--- Fade in the card
-tweenPlay(SplashCard,  medTween, { BackgroundTransparency = 0 })
-tweenPlay(splashStroke, medTween, { Transparency = 0 })
-tweenPlay(LogoText,     medTween, { TextTransparency = 0 })
-tweenPlay(StatusText,   medTween, { TextTransparency = 0 })
-tweenPlay(BarBG,        medTween, { BackgroundTransparency = 0 })
-tweenPlay(BarFill,      medTween, { BackgroundTransparency = 0 })
-tweenAndWait(VersionLabel, medTween, { TextTransparency = 0.4 })
-
--- Start a pulsing glow on the outline
-local glowPulse = tweenPlay(splashStroke, pulseTween, { Color = COLORS.OutlineGlow })
-
--- Start a gentle pulse on the logo text
-local logoPulse = tweenPlay(LogoText, pulseTween, { TextTransparency = 0.25 })
-
--- Status message cycling with loading bar progression
-local statusMessages = {
-    { text = "Connecting to GitHub...",                  progress = 0.2  },
-    { text = "Fetching Database...",                     progress = 0.5  },
-    { text = "Verifying Scripts...",                     progress = 0.8  },
-    { text = "Welcome, " .. PlayerName .. "!",           progress = 1.0  },
-}
-
-for i, msg in ipairs(statusMessages) do
-    StatusText.Text = msg.text
-    tweenAndWait(BarFill, barTween, { Size = UDim2.new(msg.progress, 0, 1, 0) })
-    if i < #statusMessages then
-        task.wait(0.35)
-    end
-end
-
--- Brief hold on the "Welcome" message
-task.wait(0.8)
-
--- Stop the pulse tweens
-glowPulse:Cancel()
-logoPulse:Cancel()
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 4: FETCH REMOTE DATABASE
--- ══════════════════════════════════════════════════════════════
-
-local Database = nil
-local fetchSuccess, fetchError = pcall(function()
-    -- game:HttpGet works on most executors; fall back to request-based methods
-    local rawData
-    if game and game.HttpGet then
-        rawData = game:HttpGet(DATABASE_URL)
-    elseif request then
-        rawData = request({ Url = DATABASE_URL, Method = "GET" }).Body
-    elseif http_request then
-        rawData = http_request({ Url = DATABASE_URL, Method = "GET" }).Body
-    elseif syn and syn.request then
-        rawData = syn.request({ Url = DATABASE_URL, Method = "GET" }).Body
-    else
-        error("No HTTP method available on this executor.")
-    end
-
-    -- The database file returns a Lua table via 'return { ... }'
-    local loader = loadstring(rawData)
-    if loader then
-        Database = loader()
-    else
-        error("Failed to parse database source.")
-    end
-end)
-
--- If fetch fails we will still open the UI but show an error notification later
-local fetchFailed = not fetchSuccess
-
-if fetchFailed then
-    warn("[Amethyst Hub] Database fetch error: " .. tostring(fetchError))
-end
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 5: FADE OUT SPLASH SCREEN
--- ══════════════════════════════════════════════════════════════
-
-local fadeOutTween = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-
-tweenPlay(SplashCard,   fadeOutTween, { BackgroundTransparency = 1 })
-tweenPlay(splashStroke,  fadeOutTween, { Transparency = 1 })
-tweenPlay(LogoText,      fadeOutTween, { TextTransparency = 1 })
-tweenPlay(StatusText,    fadeOutTween, { TextTransparency = 1 })
-tweenPlay(BarBG,         fadeOutTween, { BackgroundTransparency = 1 })
-tweenPlay(BarFill,       fadeOutTween, { BackgroundTransparency = 1 })
-tweenPlay(VersionLabel,  fadeOutTween, { TextTransparency = 1 })
-tweenAndWait(Overlay,    fadeOutTween, { BackgroundTransparency = 1 })
-
-SplashGui:Destroy()
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 6: LOAD RAYFIELD UI LIBRARY
--- ══════════════════════════════════════════════════════════════
-
-local Rayfield = loadstring(game:HttpGet(
-    "https://sirius.menu/rayfield"
-))()
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 7: CREATE THE MAIN WINDOW
--- Amethyst-themed Rayfield window.
--- ══════════════════════════════════════════════════════════════
-
-local Window = Rayfield:CreateWindow({
-    Name            = "💎 Amethyst Hub v3.0",
-    Icon            = 0,                        -- No icon (text logo is sufficient)
-    LoadingEnabled  = false,                     -- We already have our own splash
-    ConfigurationSaving = {
-        Enabled  = false,
-        FileName = "AmethystHub_Config"
-    },
-    Discord = {
-        Enabled  = false,
-    },
-    KeySystem       = false,
-    Theme           = "Amethyst",               -- Rayfield's built-in Amethyst theme
-})
-
--- Show error notification if database fetch failed
-if fetchFailed then
-    Rayfield:Notify({
-        Title   = "Connection Error",
-        Content = "Error: Could not connect to Amethyst Database. The Script Gallery will be empty.",
-        Duration = 6,
-        Image   = "alert-triangle",
-    })
-end
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 8: TAB — HOME
--- Version info, welcome message, and Discord link.
--- ══════════════════════════════════════════════════════════════
-
-local HomeTab = Window:CreateTab("Home", "home")
-
-HomeTab:CreateLabel("💎 Amethyst Hub — v3.0")
-
-HomeTab:CreateParagraph({
-    Title   = "Welcome, " .. PlayerName .. "!",
-    Content = "Amethyst Hub is your all-in-one script loader.\n\n"
-            .. "• Browse the Script Gallery to run curated scripts.\n"
-            .. "• Use the Executor tab to run scripts from any URL.\n"
-            .. "• Customize your experience in Settings.\n\n"
-            .. "Stay updated by joining our Discord community!"
-})
-
-HomeTab:CreateButton({
-    Name = "🔗 Join Discord",
-    Callback = function()
-        -- Attempt to open the Discord invite link
-        -- Replace with your actual invite code
-        local discordURL = "https://discord.gg/YourInviteCodeHere"
-
-        Rayfield:Notify({
-            Title   = "Discord",
-            Content = "Opening Discord invite... If it didn't open, visit:\n" .. discordURL,
-            Duration = 5,
-            Image   = "message-circle",
-        })
-
-        -- Try multiple methods to open the URL (executor compatibility)
-        pcall(function()
-            if setclipboard then
-                setclipboard(discordURL)
-            end
-        end)
-
-        pcall(function()
-            if (syn and syn.request) then
-                syn.request({
-                    Url    = "http://127.0.0.1:6463/rpc?v=1",
-                    Method = "POST",
-                    Headers = {
-                        ["Content-Type"] = "application/json",
-                        Origin = "https://discord.com"
-                    },
-                    Body = game:GetService("HttpService"):JSONEncode({
-                        cmd  = "INVITE_BROWSER",
-                        nonce = game:GetService("HttpService"):GenerateGUID(false),
-                        args = { code = "YourInviteCodeHere" }
-                    })
-                })
-            end
-        end)
-    end,
-})
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 9: TAB — SCRIPT GALLERY (DYNAMIC)
--- Loops through every category and script in the Database,
--- creating Rayfield sections and buttons automatically.
--- ══════════════════════════════════════════════════════════════
-
-local GalleryTab = Window:CreateTab("Script Gallery", "scroll-text")
-
-if Database and type(Database) == "table" then
-    -- Sort category names for consistent ordering
-    local categoryNames = {}
-    for categoryName, _ in pairs(Database) do
-        table.insert(categoryNames, categoryName)
-    end
-    table.sort(categoryNames)
-
-    for _, categoryName in ipairs(categoryNames) do
-        local scripts = Database[categoryName]
-
-        -- Create a section divider / label for each category
-        GalleryTab:CreateLabel("📂 " .. categoryName)
-
-        if type(scripts) == "table" then
-            for _, scriptEntry in ipairs(scripts) do
-                local sName = scriptEntry.Name or scriptEntry["Name"] or "Unnamed Script"
-                local sURL  = scriptEntry.URL  or scriptEntry["URL"]  or ""
-                local sDesc = scriptEntry.Description or scriptEntry["Description"] or ""
-
-                GalleryTab:CreateButton({
-                    Name = "▶ " .. sName,
-                    Callback = function()
-                        -- Show loading notification
-                        Rayfield:Notify({
-                            Title   = "Amethyst",
-                            Content = "Loading " .. sName .. "...",
-                            Duration = 4,
-                            Image   = "download",
-                        })
-
-                        -- Execute the remote script safely
-                        local execOk, execErr = pcall(function()
-                            loadstring(game:HttpGet(sURL))()
-                        end)
-
-                        if not execOk then
-                            Rayfield:Notify({
-                                Title   = "Execution Error",
-                                Content = "Failed to load " .. sName .. ":\n" .. tostring(execErr),
-                                Duration = 6,
-                                Image   = "alert-triangle",
-                            })
-                            warn("[Amethyst Hub] Script execution error (" .. sName .. "): " .. tostring(execErr))
-                        else
-                            Rayfield:Notify({
-                                Title   = "Success",
-                                Content = sName .. " loaded successfully!",
-                                Duration = 3,
-                                Image   = "check-circle",
-                            })
-                        end
-                    end,
-                })
-
-                -- Show description as a paragraph if available
-                if sDesc ~= "" then
-                    GalleryTab:CreateParagraph({
-                        Title   = "",
-                        Content = sDesc,
-                    })
-                end
-            end
-        end
-    end
-else
-    GalleryTab:CreateLabel("⚠️ No database loaded — check your connection.")
-end
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 10: TAB — EXECUTOR
--- Text input for a custom script URL and an Execute button.
--- ══════════════════════════════════════════════════════════════
-
-local ExecutorTab = Window:CreateTab("Executor", "terminal")
-
-local customURL = ""
-
-ExecutorTab:CreateParagraph({
-    Title   = "Custom Script Executor",
-    Content = "Paste a raw script URL below and press Execute to run it."
-})
-
-ExecutorTab:CreateInput({
-    Name            = "Custom URL",
-    CurrentValue    = "",
-    PlaceholderText = "https://raw.githubusercontent.com/...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(text)
-        customURL = text
-    end,
-})
-
-ExecutorTab:CreateButton({
-    Name = "🚀 Execute",
-    Callback = function()
-        if customURL == nil or customURL == "" then
-            Rayfield:Notify({
-                Title   = "Executor",
-                Content = "Please enter a URL first.",
-                Duration = 3,
-                Image   = "alert-circle",
-            })
-            return
-        end
-
-        Rayfield:Notify({
-            Title   = "Executor",
-            Content = "Executing script from URL...",
-            Duration = 3,
-            Image   = "loader",
-        })
-
-        local ok, err = pcall(function()
-            loadstring(game:HttpGet(customURL))()
-        end)
-
-        if not ok then
-            Rayfield:Notify({
-                Title   = "Execution Error",
-                Content = "Failed:\n" .. tostring(err),
-                Duration = 6,
-                Image   = "alert-triangle",
-            })
-        else
-            Rayfield:Notify({
-                Title   = "Success",
-                Content = "Custom script executed successfully!",
-                Duration = 3,
-                Image   = "check-circle",
-            })
-        end
-    end,
-})
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 11: TAB — SETTINGS
--- Destroy UI button and Amethyst Watermark toggle.
--- ══════════════════════════════════════════════════════════════
-
-local SettingsTab = Window:CreateTab("Settings", "settings")
-
--- ── Amethyst Watermark ──
--- A subtle "Amethyst Hub v3.0" label anchored at the bottom-right.
-
-local WatermarkGui = Instance.new("ScreenGui")
-WatermarkGui.Name = "AmethystWatermark"
-WatermarkGui.ResetOnSpawn = false
-WatermarkGui.IgnoreGuiInset = true
-WatermarkGui.DisplayOrder = 998
-
-pcall(function()
-    WatermarkGui.Parent = guiParent
-end)
-if not WatermarkGui.Parent then
-    WatermarkGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-end
-
-local WatermarkLabel = Instance.new("TextLabel")
-WatermarkLabel.Name = "WatermarkLabel"
-WatermarkLabel.AnchorPoint = Vector2.new(1, 1)
-WatermarkLabel.Position = UDim2.new(1, -12, 1, -8)
-WatermarkLabel.Size = UDim2.new(0, 180, 0, 24)
-WatermarkLabel.BackgroundTransparency = 1
-WatermarkLabel.Text = "💎 Amethyst Hub v3.0"
-WatermarkLabel.TextColor3 = COLORS.Outline
-WatermarkLabel.TextTransparency = 0.35
-WatermarkLabel.Font = Enum.Font.GothamBold
-WatermarkLabel.TextSize = 13
-WatermarkLabel.TextXAlignment = Enum.TextXAlignment.Right
-WatermarkLabel.Parent = WatermarkGui
-
--- Watermark starts visible (enabled by default)
-WatermarkGui.Enabled = true
-
-SettingsTab:CreateToggle({
-    Name          = "Show Amethyst Watermark",
-    CurrentValue  = true,
-    Flag          = "AmethystWatermarkToggle",
-    Callback = function(state)
-        WatermarkGui.Enabled = state
-    end,
-})
-
-SettingsTab:CreateDivider()
-
-SettingsTab:CreateButton({
-    Name = "🗑️ Destroy UI",
-    Callback = function()
-        Rayfield:Notify({
-            Title   = "Goodbye!",
-            Content = "Amethyst Hub UI destroyed. Re-execute the script to reload.",
-            Duration = 3,
-            Image   = "log-out",
-        })
-
-        task.wait(0.5)
-
-        -- Clean up watermark
-        pcall(function()
-            WatermarkGui:Destroy()
-        end)
-
-        -- Destroy Rayfield window
-        pcall(function()
-            Rayfield:Destroy()
-        end)
-
-        -- Allow re-loading after destroy
-        getgenv().AmethystLoaded = false
-    end,
-})
-
--- ══════════════════════════════════════════════════════════════
--- SECTION 12: FINAL WELCOME NOTIFICATION
--- ══════════════════════════════════════════════════════════════
-
-Rayfield:Notify({
-    Title   = "💎 Amethyst Hub",
-    Content = "Welcome, " .. PlayerName .. "! Hub loaded successfully.",
-    Duration = 4,
-    Image   = "gem",
-})
-
--- ══════════════════════════════════════════════════════════════
--- END OF AMETHYST HUB LOADER
--- ══════════════════════════════════════════════════════════════
+ ▄██████████████████████████████████████████████████████████████▄
+ █                                                              █
+ █  ░█████╗░██████╗░░██████╗██╗██████╗░██╗░█████╗░███╗░░██╗   █
+ █  ██╔══██╗██╔══██╗██╔════╝██║██╔══██╗██║██╔══██╗████╗░██║   █
+ █  ██║░░██║██████╦╝╚█████╗░██║██║░░██║██║███████║██╔██╗██║   █
+ █  ██║░░██║██╔══██╗░╚═══██╗██║██║░░██║██║██╔══██║██║╚██╗█║   █
+ █  ╚█████╔╝██████╦╝██████╔╝██║██████╔╝██║██║░░██║██║░╚████║  █
+ █  ░╚════╝░╚═════╝░╚═════╝░╚═╝╚═════╝░╚═╝╚═╝░░╚═╝╚═╝░╚═══╝ █
+ █                                                              █
+ █▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█
+ █▓  OBSIDIAN VM v4.2.1 ━━ Bytecode Virtualization Engine    ▓█
+ █▓━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▓█
+ █▓  ⚠  THIS FILE IS PROTECTED BY OBSIDIAN VM ENGINE  ⚠      ▓█
+ █▓  ⚠  Reverse-engineering is PROHIBITED and will trigger    ▓█
+ █▓     cascading fail-safe countermeasures.                  ▓█
+ █▓  ⚠  All opcodes are randomized per-build.                ▓█
+ █▓  ⚠  Anti-tamper integrity checksums are ACTIVE.           ▓█
+ █▓  ⚠  Bytecode is XOR-encrypted with rolling polykey.      ▓█
+ █▓━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━▓█
+ █▓  Build: f75cc8-0d96  Timestamp: 20260319093716              ▓█
+ █▓  Entropy: 0.71910129  Opcode Seed: dd8b8cf9   ▓█
+ █▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█
+ ▀██████████████████████████████████████████████████████████████▀
+]]--
+local OIl=nil;
+local zIl=0.68019553;
+local IlOO=nil;
+local _O_I=nil;
+local _l__=10884;
+local IIIO=true;
+local llO=47114;
+local vOO=nil;
+local lIIl=true;
+local IllO={};
+local II__=0.21075805;
+local Illl=nil;
+local I_Ol=34672;
+local x_l="xb19i4l7d";
+local _lOO=":7Q&ESIHz3[Kj<^L+,Xvo6edA*acMs=fC4-@]x5|D;2~T#`U8ihR0>F(OYkP{9pr.b$WmZ1!n}Gt/glB)q%wN";
+local OI_={132,240,40,25,169,110,173,149,93,237,232,203,137,186,199,87,238,27,4,209,214,136,60,240,18,179,177,44,7,222,116,116};
+local l_IO=1;
+local lO_l={"FhT>90;=Z>D+~.o-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq",".x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bXjGXF~sjTDtm)5BdCw(+6k!^jniH]rU&[pnC9bUDC`F6F>,KrF.drqR(wnU+6k!^jniH]0%24jTKIScD]ZG:F~sjT","D!c%qBd|!Y2AT][jniH]0%24M14Q~m^wiFnGT3E{F.{pD{CkK@s^lQ7]voZm0g0x1$#!UmXiK6!F~]:l$A:cCBdCq@~].sMjniz,Sibq3TKIScD]ZG:F~]:l$A:cCBdCw(+6k!^jniH]0%24jTKIScD]ZG:F~]:l$A:cCBdCw(","+6k!^jniH]CgC~WTKISc9#bEnF>n;2i>/a0>6>zZ+6k!^jniH]0%24jTKIScD]ZG:F~]:l$A:cCBdCw(+6k!^jniH]0%24jTKIScD+~.L2**wD$TchZBdCq@`)]1g4w7qBgc|kj1zm3S^))4>t|QPR;X<!90siQq;H@hKD{FR~","GH6L2b/,^FD]ZG:F~]:l$A:cC+rr9B+6k!^}P[{e0%idU&>BrGLho1wFh(2%`3Uc,YrES/4&ZXsf4*-$0Bn(Kns9[#D]ZG:F~]:l$A:cCBdCw(+6k!^jniz,Si$G@TKIEh.xzHBF]akr$ct7ePz1>i+aTM]@8FwM}KtrUbRKj=","oxfQ7q~L][;Rrc|PKA#Bx,6A6CCd3>}<4~lbR,P#D]r[3HB#+D$AH^>dQi]hg+w9WeSB`/t9PaR){p&!jSf;gqi;c7$A:cCBdCw(+6k!^jniH]0%24jTKIScD]ZG:F~]:l$A:cCB+1idH/-I}jRBC~0%2@]<]/mH+6e:./&x-t","~``:5{H&$/cg=z^4He>gg>-D$TE<s%^F=XltW!mY$A:cCBdCw(+6k!^jniH]CgC~WTKISc9#bEnF~sjbA2UP(0sY{2D]Ir&fm+]0}$1&b14&:%o[jwwGx+i($A:cCBdCw(+6k!^jniH]0%24jTKIScD]Z!93ERA($A:*j6UC6m",";t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6Z","CgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&b+)GkrIH)|<ajRBC2CgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&","9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrklo57:m6-Zo9b;76,Us*2:&z5U&rBP0Q","(QnG@8$B5Od[UPiE;3pEm*~@ob8jsODfo>1FiCHL$fItT{ahr&|$`$o-0($lt4p$NrYXHj<sc>RFikwzTrY&Z0leHhf@~Tp-EjihFi^m|X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+","gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[Ex$-,","0/xm/$X)UTxna*F}Ui*<8O*=^Pr/v{534/of9HaP0%24b.an[,;&Nsi/3aWmhhlWC0YN*eaqs;.47Cx#G.wxBbiL=1,,EDb)>hO3~#Da,BaB(ofzBgWf^9{cl0;Xg.aF<jXLZ2Eq6@|z;,;P21lzvs+a>D4]n9+<n~F9>$XqMq","X</1pRRGLtTZXx+>sUazxvPlvjZP^[BvYXh0DLis9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`","DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSiYms2TT#g3Gfww.jN9M$*-6i;C|r-+=EG=64:Fk.L1eh`SQK%Is@K*.6lLwppqbq687YG",";t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6Z","CgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ez6!fD;RwbsBM#XH-O&-+jniH]0%24jUOR4gLhg^A/3*!#hd]K2Yp^CvD.Ya^xZmPT#1q0$.AEfa<O%HP1s4*{~#/ewBdCQMx}ZS*vW$t9ZA2#(99PCN",";Ea,h/3)eRhd]K2Yrv$*Dbrf5-{o({t@EI!!Y)|qD]ZG:F;4(}`3v%w`/U{e5;>c1CftzDm)|i$bRK-dozfCf2fYw(`3aGS>c)&1Dz]/zcvrsA/=*ezUOR4gLhg^A/3*!#hd]K2Yp^CAfxnsj4%ED*ZA2#(99PClx8PM8t;Sfr","(rhrg`ldaK+6k!^jniH*0/xOBbY3t%<@-mU%X/$:r{68I>:FTp|{.k4E-jl!}WYR>r(0^ZEM%CC/zPf6$A7S>~=zF%5;>KwAcZA;GbHM1$}h.ILgUMr}WTTw`Hz`/ijf;o+6k!^jZP^$t{(gp)QPmKX+gAtGT5Cf;Rwbs~=zF%","5;RgP4:FH2tkZ-H)QPmKX+gfL2AwGDO4x=#9fs:U+Mvt-4F@s*lRa`!!SMCKLgUMr}W~ns0^OLxBAbtNH/-I}jpHgZg:fv&1{oDHD]ZG:k&tOj;lt+)):~g~;z03ML-aSj0)//3Tj|`r]8Nh}F~]:lppqW3Y1-|oaq6Q[@tX1=","#/;EtTI*`+Lgb*.F~]:l$A:cCtplc3Dbp1p<-{i&tHF3Q;iMPM]i:,6P(z@n1xbz>BdCw(+eG:]As*#=t457OT&pQB<W[gMF~C>miFn>rYW,D=CFqobjZP^bt90DPiiQIY+vYqBb]@`,!@Ypcn}{8|[5U`8^Kn~D0%2AETHD89","Xm.3K)}`8@i:qm(Y!bOt4C98wE2AM[0Bcijt`>a=X!T,CGT545Wt0H6{SNn[v`)s*-o.qK(Tt,aTj809D5X#*>vjiG$A:cCBdSC;=$~S>CKYRXBvKUO0;=Z>D4h~c$WhB>$A:cCBdCw(LAbql-07H6F16!XrI:s*xGGff>v<3}","!@Yp=}+8,p+6k!^j!-;=.|Am>r%Rl#MXP!UF0=26ih<!6{4#HD+6k!^Xq>SFG.N&<~4NZ6LO.Z;Rgqsip]LkeG[}:6jPWN1jniH]0wt,e}Rn%K<x:`5%oLmXTm`|oY19#9+6k!^ag]5cZA2:Ur%0SiK1xxHF>#;h;hfH-OG!*!","oG`(#,(cbo0)/qN2!m^=@d.4OF~]:lppqW39YCM(f&C8&;Qkq%0%244p&CYpD]ZG:F~]:l$A7S>8L+NAf7MGCx1,Z,p/Le/h6~8U@)#g^F;~[h.QM~NBdCwKf[3)s5;MMltf{xITKI^=3m2If)!.UthA^Dw`nm4io3~#wj1Gd4","#Zsvq2~*.|vDTS3GZ28-{+58;{I:xpDY%5CaG5%3ZclZq){pQNDx:5Oq8a2.pzjssRqzE94Ewe:]nZl(GxOvPb8js<oHP~~.`W<,~+oCIRS7G`aq67[e9]kK/7g)r2Dof5]gt>0PF:-CT2q0gO$ga|K1pCZL9p*]O.Qb`ht}Hj","v|<P.{g==I#SXZH0=8:|fx!SA]GbOH#g}G:A@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mF","E&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7BD^FiKN%tdg7kIfQd&F0|Qt0^x1@B*w%W6T45!E;3pECgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+","gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQ","Sirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]}@(<m=m4ZAS10rsM`jLdU;7/zm]2$siW,YZF6nD[`2$->~ar0/ODxTS.0)<E$61GTsa5~v+@E0&Y:h+s~s;fp@bx#1q0$.AEf/<7W5/nevZ#i>Y]sP-.F=-ir%-x2jSlG]8L+!SvcI","+hZ$jG35L(hA^Gk>Qvo(ffxm*jniI9t{(gpTSU[aX<lc5F0=N5TZn[<>QxC(5@Ot%fp>/R(D,`/!E<]%Xo#P#qg}5+>Z$Dp)UkzsD@.8fx+,pW(gnarTKz.rX^]MY173Q8rP;ElBdC%p52e(<-Shzen2YG5b8KbFM,aZaF068|","i>Xw0Pbka<+ce-[f9SZXtW^*;rQ$b.<sY:k}}1<b;nW5aP]$PiD5~QZ]vY{Qr~{.N.A0@X+G>*vG1Y-rp],p6Y1-Y&D[fIij.:(/lRrR%992QXMXP!UFim7z`3aG50&Y:h+6<2:]vY{QmMA3c;|%3R<=I7k/&=ZYiMdhYR4AM~","o3#Z!4FpB`gc/:$;e`ODD]m*B/K[WZ(rhA#{IFEi5zs=0@86qD#/;EtTS.0)<E$ekq8>St;<YozYfO:}o57:0x!df1nDp@PTS.-}+U)3BF05n{;hCt[0l6w~f[`vafpKTMtW^/>bO|MO<Ndq5neK[O`3K34B}Nse]i#O`f4+*p","gctW}TEfpN3m2nF/zPF-`HnEa0d^$Pxv{SDxh-or0%24nr(0^ZD=IzgGT#kGWt0*M>s`>}]iB.2f{c0oW-xEA1ClM(;S~fvF~]:K;hCt[0lS(6fKAMMcU2H$g0!z/T3IN7LY^(;qZkQS$MB}w9PB%RD@T&W,sa8:0%24grY,g$","LsGc7))gfw$6.1+PKIe:47M&vjn`a9g*bEnTE<sb+U!~A/3)mA}s;DbBcjXqx,NWajbn>H$Hm#YrF.5Gv[rBm/.mcY~#i[%P$QI!|m/+O<x{+iG]^</$U%W)<sX;8FhM+H{t^z<9&8T.x,==/xe#A|t90DP2!1s7+tWXb/z$>{","$si/+P5;%9f[`v,Dmh*}0%24nr(0^ZDf$wsGL{lDWt0*M>s`>}]iB.2f{c0oW-x0f14QMr;S~fvF~@N)i>=82Ypno]Dbp1~XqRBeG.N&MrYLN!SwNvG16f-aiFn>rYk%+@+6{iFx1XQQF!pg:.BQ{U^w0^(F8)P,#5q(s>s@ez","f&=XnjniH]B`t9gpfz7vLdw())*nav;AYTvtp/f[xoM{cCNtipG@ADZ1;vcXD]ZG:)R$2<2/GTo>O]N]6j&t+-)@P|nLM8gTH=~ELYL/E)*cepi>=82Y$KGj5xmM/x!^<!#/;EtTSG*v+o*mT17Fgn;dYp7Bf)Bx5T0vbjniH]","B6C/:1C/o)<Cz41/I3X]Tf1=q)GO*Mf[#PKf{rR]0g)2G.ABSm+8Id2/[^(&h,-mnP.3`G+M.cLC=&(!t|n[#b%ICCX;cj1RN%oOTZ}7aBCf}so3`5px^1^%F6W)k$U!C4LdK-{q252T$A:abP.3`G+a!DLjZP^!tfFsWr%BKE","+U!kr(ezSi`[+8DPx+2tH/-I}j.7L)F!a)Xb/,^F&Em8+F~]:b$a&(e{aC;GC(mo#jrh310g*1#iexLpD]Z}xG!bU^`[+8DPxv/M4Qn.ljZP^~9/i>Tr%9>e@dxa/GL-*/2L3G@B*HG6+6k!^5;MP/mc3x89{a`+X^.c/F~]kj","{XZ]ZBNOpeXm#wX->H,Y0g*1#iexLpD]Z}xG!bU^`[+8DPxvMIxG.G@jZP^~9/i>Tr%9>e@dxcHndHi{$=[e7G[`{k+6kn347@<G}.BX#![}Is^F=<&G2pMq$A:a|Yn:-|D&a4fCH,z^na[Fh2T5a-bgQoK-5^b%|{<Qhe>Pl+","gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQ","Sirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6Z#g}G:)-@:TI>p;}P)Sq|9^/.RhN=h6oG.!YE;3pEW&i#ZTp@/d<scglq~^%eTLX-[0PPjC+M5S2-aLrPn6(td.AltpX/x</))gK<9pS&gB+1iegLRMHU7)sEI5C3AA@9Gq",".x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`","DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^.B}]5-xPzP`Hf$K`s@}9>|0%LLCrNFG3+8DD>GT#~gb($4CY1-Y74C^`8E=+2j}bQ1z1{q;WvxnxFk&BHt2eeWTOU0G$f$K`s@NsSXl0;2ZpH7Eex,39]/3*@D{Gp,>PsR5R","x`;NUf.tb<Gr2H!/T}3>Q5W3(/z7|X~XW/TPbka}+CA0<-f]nMt457`t`+{H<wnP1>%+=C;lO>e1wUT/x,6D]]}lvd}<db>b0TX4Ih@/(q~XhKi>=$21wUT/x,6D]]}lv[/MhTr.acG:X;.jnk&BNXZ[CT})t7+k-8gc>x!Ax+","/]m0D1]7wRxWmzqnt0f-;X<;Y>sTcN-M91AxLUlh(G(,X.AI,$o]HTgF8)5W9XM<mY!Z&S|bE%7CCd%P}[R$}.an*N<x&]^RNGQ^$=.6oBCe*Tv#QIHx+Fv118N,bTEfTlD4;fA/^MvirwARmBd-lC+e8nWx+zzn0tmKBT&pd9",",v^%RRRWF]$A:a$0ldWdf[U&h@0.[Ut{(gpTSGx;v;EH/GZ4;OiR[v)tp/~fxoUW>f4+*pgctW};`$F5D]Z}Q)*a@1~Lhr<Bw^tH5T0v|XqR$g/fk&Wb8jM1X</+~2f=#c;Ao$Q>s3t~f54.dx!d`tbxd$hp&m^8D]ZG:1cj|h","hRf^l9hO!Lf[`vajZP^$t{(gp)QPmKX+gF!G18}T;hfFb9YdT~L{0wrDpKm=g(Lpc0-o:LM6D8bFR1jc~5}[|PzB;*x,==/xd$BnGxoeprYz!$DMmSg)B)>%}]5-xPzP`@C-m(rCNC070)S%L!E<]%Xo92iqZYfRhAmg>l>7+(","C-m(rCNCZg}WZ[[UOi*g<NA(tGmt~ZRt7oo{I,Y=6^I~ijZP^~9/i>C~4K]RxG})&P(z@}p]L0~1q]&UfK2M,<fp[!g:fv&1{oDD+vbvGP%n;s(rh6}0)ed3fKL`WobzH;k[GBa2!m^,x8{id/zYv$8h!e*k5w;-D]H^dat1{U","B`5!#b8KqRDxjHv>!qOdi:%vtP[H3*D@`|3x$f-`n~n;xb8cWSD5#gA%o+v5`HIhnPKIe:C%d^9cXfS8BiQtd91%f8]6OoYnejBdhB[b=9dU@&f[0T@CfnrknD(WU2!1UE<7W;{/=YB:;AQ>MPz9C4+s*>!@8`lBGrt^9rc7A>","+:is4}GD<K(.o^NBAb/#Dz3{)4wO39t4U9,T9k2RLh//,24{}K`Hr=/PKIvrs1!@:jZPLKZe6d61Ie:aLdknZ1cj|hhRfc3>:;r:D31U6x$D-{tf{]1TzrRT<s7Q.>B)xrrkrU7)U(!Yj9)O%5|))1/I4A:b%aeH^)Z.!G+Si^","$a&(e{M;F|5;l/!<D+zdk[GBA~2Zsa@db5&)*a@1~L^Q9Y@T8<4PS*(j{AY:tK:(2bh$K,]i:d*P(z@Gp]LkeG[`{<f$K`s@G<0Dnd^Xg.BQq#+eX17b+X`Uh+QY~Bc<#n=^.$]e@4FP}[AWar%hr.^>^b1n>4s%T@ktjk5w;-","D]H^dat1{UB`5!#b8KqRDxjHX24{}K`Hr=/PKIvr*NSqYf{0BwqZ)pDWL/WNf3i==1cj|hhRfc3>:;pmx,==/xdm.+Ze6d61I6}Q,:cGN/5c~0hAdddqg-K*x,6DDCNtU50)g3[04dM[vxwhr)*a@1~<|AOPr6nsLA..ifN0|/","t9~0I)4:2x^)Bf[))1(p({<np2PDjh4=^1%4wD;|kbrQ9TjG)<M,aZfri0>f$d6ZQ9P1lg+=k<Wxva&5G]^</}RX`Q&SxP(F;4((;eql[P]WahD[|*=jS#A-gf>ssb8c}cM<w@#GXmq%iUW9C{4BRp+6T#SfI~1Wq<5-}}RX`Q","&SxP(>N35T~X<RnPr&5s+6<2-fp@.PBa<Q(bh$K,xvmx%PFbdF;0@6mY19#46;Rx|x+XzK0%LLM/L-5zx[{DbRl^z@p]L08B*H.`[;v$ALEa}7}<-9|W,DOF+/.XZk&/jG~#OR0P]NqCK[(Tnj1GzAk[GBMiex+<+o9}Y/z&zh","(]g#}Y,<-8D[iDW4:a~-}.BX#.)BSAD5]!aG+N%cTWBr[2Ib%Y+6<;KB|W%c0BXfA!&,4G<x7`7t9oBA;0@6mY19#4ebokreIii;Bae<{THir=IQ,I=r/*w8~#iEki$WgDebokr<sm{5gsI6vrN(7<LdUf{gMI,w!kq@gYLKm$","-czq{4F);AP9o,a1{#,(+vN[O$D26$`3v7K{ITsZDxi[NfP%j^W&ex])=U(CDxjH,Y3Aj5TLzh&OoCB<52k%RCCdqgn6FX:$`kGhXAi3o/.k~>8sPeHPKIe:C%d^9cXfS8BiQrf14%}#]oAU9qh[OSh#-mwOo4At]eFnv]a1kg","}<=s$rc7A>+:isxG1&DYPBZEIBAb/#Dz3{)4wO39t4U9,Trhq|<CaRw/[+AD}fx6l0Cktr52kqKdPYKR0%LLK)CiR*<EPzhg{B6E{t<;O0Pmpn-czqr4wO23Be`lBrNAqAD-G2aqi;am9n.Hpq}FRko3~`&E=+=Sg*bHfbh;/@","EsHH@qie{3$6.ZnU,RARvUm~GL-]7LF6$CMTjb!<@lI#tRF}O3`z2&v2Ib%Yv8[}/fZC)NW4t,{i/M/P<r~IEYSmXB!@YpM)U(gfv+(=8CNOG*W&ex]~x1k-,#:%:qeE;@hAm)]>F1}fD3Z)-Xq>8%ZeYpv1r=vkjH,$x/z&z8","Wthl;1wUC94Qp{vfP%j^W&ex]t,mrwLC.m@F>Ts!R!^s$2Ib%Y6<(D`4wsQrq>-G(.aF9g&SxP(>%9Avihh[,P5;%9f[`v,DZalck;5om.aF9g&SxP(>NX;ii8]U7U#5|jvhfUwxe*wzgc$W!0|icS<f=R%/z&zhPBZEI~Q5~W","+6<;a+(/$U}bjlhqc)Lex+/xf/3qf$Wt0(z{IX7(a*c=8Exm#r0)4X4b/,^FD=Lo)Fh7Hz2/PI(0YUPRDbrf5-{6vKBA;R%UO0c*^wE8/t;~!WTm}%A`hFei5];ese@4&bp)l:Tr:piIDx7Bg)wUP.}46S!U1ANDD31U6x$D-{","tf{]1TzrRT<s7Q.>B)xrrkrU7)U(!0z75%YeffMztk)2=9{@=Pf3845neD(D;*ahdGKSD=+vNK[,wL+HF6$Cd0x.(U[L3s;nvNH,Wt0]t9Ys%9D[|*=,wL+QF6$CMTjbbfC{XhbGZC5!9Zb6h9&m914CT3>4(^8{PIU}Tt6oj=","SSjS=GZC|A#5q-SP$Q]}z75%YeffMa}$rSP14QwHX`wROG2++Gh*ovOO5p22K;:@=xWw6Gr!jxpbRjFkj{Q*Kgp94GWtR@fU}Hq2c~qz-x!d`t0%LLaZr2-k,6Tm|/4x!gT~h<+0NG1XX)*iIeffeFO!*X62~*.U+o)LWGTsaO","`HZt29YdoZDbrf5-{6vKBA/dLr@,#SIh@/nG1Y-r9n.Hpqn+Aqxo5->LEa$lBA/dLr4r;0Lh/1@F~^Cwh69:xPNDYlx,fRs-0<[G/sM0NUO>Q&+GMcCGT#~g!@YpM)U(GO+vwqfe@4&9/f6iIt`>a=X!T,CGT-G`;lt+)BAb/|","=,%g8c*@WPBA/dLrxh|LLcAYE}$G|F#5q-SP$Q]}er:5cx28spn~FPTTKR@LMLDDG$WhB>9Zb|;Y~H@9|$.$b@Um:p0%L^l0x.(Uz!r/4>%*j3TZ}7^tpldBf<])aE@#5$.<|`YbRzs1v;^W#}}q.C1[}^/)GO*L5;>jb4Fw5A","}Wj6w![tYEX6Ws>q8p=S$=3`$0sR,&]iTr)E-jl!}WYRUbRK~a+vN-Stmm.mWt0*M>s`>}]iB.2f{c0oW&ex]}0{{K+:WPU!)w1m~#D*EP3f[WvRX>/fZC)N>UkHI1Is~t;3vU2)l8:Q;6jc1YZ@bHD31U6x$D-{tf{]1TzrRT","<s7Q.>B)xrrkrU7)U(G>z:Leix~#,j.|Az4r4.-N^)Z.!G+Si^$a&(e{M;F|5;l/!<D+zdk[GBA~24GiD5Tr0!)w1m~#D*EP3f[Wv8[}/fZC)NW4t,{i/M/P<r~IE{0Epgp]L08B*+D9z:Leix~#,j.|Az4r4rg.ozKj^GL~7p","PgUr}>s[s;5T0PDjZP^B#nQ#W1Is~tSF@0T}$Gq.8sPSdBd0.Sv5^!]aeWQa/f8};.*j^$x+D**q>c4i;hfHotplc;=Tqno<sm{5gMq9HrFvj8LAGDm/zY`w;R(TZkj9{|ebokrat1{UB`5!#b8KqRDxjHX2-QcOhRdTPiW7<@","DP&vQ4qOjH0BFk<rI]Ob+iYeCGL-<12[>71>Q[^.D^!U1f9A^kn;*r,9pxGwf3i-&2-QcOhRdTPiW7<@DPQxtx!d`t0%LLaZr2-k,6Tm|/4xn{pri:~cbmiU+slN64::EUr~{Ca.aF7g+(XUeB%oYB#D]j^6XNxOU<C+n4OsKw","0/Mhm!z.AYX<lcck&/+&T1Z]<Px3aUD[|*=,wLINF6Z-31{#,0v;EKQ/$!S+;Bl,70YG`Ko3U>3]};)H}bQ}-$e6$)XLI#IG+SFviqAgo{I:xpDYqUOfN*fQn~0cdTKR@T<O%HP9%lSa9n.Hpq}FRPo3T[-4qr[RpXEqfr%TbH","Kp*%*Zk&]fiUN~>P5{*{Mvvqh4wolcB6CAZ9{@=bSwQX22fYw(`3aG0PKI$g5~G(kjn8P*W7bs-.:PWq+am}~qZkQ&159@;U#5|jvhDj^@8}WEgaLUP~|FR8Xo#{Eb1rBY91*R|9Y;bj|bgXjx+XzKF}wR71pw}cLgUMr}W#OS",";ghh|0&Y:h+6<2C]vY{Q$Heki~4K]RxGG7v>vj8k;dR3&U#bt,D[e<(D9LU!ZAl302!WFh+i#/(b!221;*I>t>:>#4|mW2k*AYmPg@7*[8B8mGL*e.O2c(Fm$cO7!Yr&t)+cdIsjb06:najPqbiasjLl>eR1cj|hhRfc3>:;Ys","+s9T`at~=ft;zOhTH|/],#:%:qeE;@hAm)]>F1}fD3Z)-Xq>#|)*8%^!fExEEM%CCRN}$3`Hr={0CfZ(5xw:rfp3Y.n2YGnTENQWLdw())*nav;AYTvtpG6M@}g*=]vY{QmMA3c;2!NE+*r-#q2$>}$A:a.Y1afP5~G(`jrI$b","n;*ro1-TX.^F=<&G~/igWtR@>(<p5zCpK=wMLrUT(;A&x!S5vmXL1Q%F~]:,T1giQY1-Y5+csRSfP%K;Bo)1YZ./:L+8D0rk&BroUaXF]0&Y:h6;BjnL*F.{r}YH,TKIScD]Z}+/K:B2T1ZxsBf4ALxXqF6x1+q$n+%U&rN(7<","LdUf{gMI,w!]jQ(!QI1+5T>v-CNCtt}.)C!rcH0ND]ZG:Fi/GQPgGZ9Ps+[S+fr9m-)Lr!g(r]21-TX.^F=<&G~/igWtR@>(<p5zCpK=we93x2}W4f<q%ir|+G~DaG!z0Gp],;MY;d3c5ThmND^O6Qq<2|o.dGzOv;<>Lt5Tm7","$e*-[BfRL%Hgi6[c,BYag4.rmZ$<$n+G0GR/.mcY$=31G0sR,&D]IoG@8}pEG.w~/r@vh`+e5pm}n`6fWt>#5Y1-OrD.Y*=x285)Bi&a]14QMr]8%tb}n`o:iMdhY)UYB,aa4wBxlx%X.+t<$)rRh$<EK.pGT~m`;hY0o%[X^b","o]Gz^CNGNX}}6m#rNamrDfY)K)>0|);X<pPYr&{/xGn3{fP%jhG.w~/r@vd5Xmxt0}n`6fWt>#5Y1-OrD.Y*=AcZj~W&ex]2!1D9L)`C%qg}5+p]Xda2Ib%Yer:5cx28spn~FPTTKR@+xoU1slRi`3ppq$t0=UvSf={;cx2|dG","n8wo3.l{#OX/x*GqiL}};0+p6Px+]Qx,cN@x1,h.nDb=irF,)v+6<X!F8@;zi>/ssY!/`PxGv@cXqROM0%24jWhC2bjH,};F~^sN;Asa[0s{7*+cdokoWBp0gFxzd~;XAKD]ZG:F~]:l$A:cCBdCw(+a!:%fS%)xBF%(di6k-U","D=a-rF~]:lUqnqtOo4A.+6TcSx+nU6t4p$9.aF*%v;EUl>}j*n$A:cCBdCw(+6k!^jniH]0%24jTSwi#X!T@C)`edz!@DE(BfR:g+6k!^D^(3(q<5s&T[/1ALdKfGne[]@{/[p+>O}6|vD)YAjniH]0%24jTKIScD]ZG:F~]:l","$s<0aY,<00f=YFO,wL~=0ts2}TKIScjDSIrg{Bcv$dm!+{I]*$5xw:jj!HaMmMA3cbRKkdLh/1X>}$9}b>B1aBdCw(+6k!^j.:(/}[*:=1</.a-qMlGF8vM+UePa6Pbka6o3`$^f^p^b0/OsL9rav]^wEi,qo}1`hh,R-Y!G2.","5,LPcjniI/gc&%t1KWM4<@q1&g{Bcv$=M]=)Q7A#47M&vjn`z;n2Yter%>Pd+/N<AGZCcM;B^(okj*s{CpK=w^K1SOZAl#.TKR@~z,3ps>B)xrr$$ie)7i0>x!Niexin-:F6$@sTjbG-[#X*3F~]:6~${;@t@UmF4E7O&x|k*C","B8de:1<B=7X<Bo>F~]:l$A:a;PKLerC9{voL-]76Y<0c{TKII7+Uw[lGTx|!ppqWH0NsD4+s-O#CKk@$0G@:PT[/WdLl!&W/&8q%TmDMMYL.|Sx,62,]o3-g(TsQr;eUiZ]6YQLG^N}X~v+@C0YsvA+ce-[f9&zW}<S>F)SfLv","XeGv,G~tiGrP;EaP.#Dn4C98wvmXc[G]hxn;eUiZ]6hpqzj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mF","E&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3A0DLisE{|5Qp7]U<13Er<UT-Ow+=EG6da{j&9B^d!thSe.M,aZf-5^b%|{<Qhe>Pl+","gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQ","Sirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRae#LgUMr}W~Zki(^hT>cldD+s0h;E-jl!}WY0[bhgm3EkrL8/z$>{$fIKwk5YM9fK^(<XqR6N}WP9g$U%W)<sX;8RB3rx$A:c~)t:p{;H4#1x^Zf:nD!;hrYX7P","DMWvs}`~09$f+^;k;r(1fz<(<f@cFq0tga)p5dmPDftT+qdvG[p1K1ZY1dkS52d4HC&H,Y0%24nr(0^ZDftC^$<Z8p}=7(FBs2XEx}ZS*jb18,0/xOBbFw*2<f/Yxq~+SFTZZ`7BdCw(+6knKCNiD:gc:NET&p]&Xe}!cq8A(5","iUiX}2Qq;|6,Iptc29(*0%24jb8=O}+t25$/zNknhhlWT9=g!B+6k!^jniH]Boq{Z.aF*+f3U<-B%oYkiUR|r2@;]GLA$I5aG5%3ZclZq){90:SaY}`G,KAA$dme>;NRZTv<Ow+CQx$R0%24Br=:EwvXra}q8*2iTmkeM>sTcW","|D1wQjniH]0%24j1-#Q$vDTStk&gL-i>8jSY!k+(f]vWaj{dL50%LL#GFdH93odUs1N%Y-$agCT9=d>xLApRd6CmZ-)*U%>r(*vZD]ZG:/[^`:~`-54O#=1mD[`2ZD{NNknDUA91zswL,,D7IF~]:l$A:cC>:+`Yx,NFAXqR=g","t;s{tZ5!ll<]<T*1q8`=WtR1>2Qq;|6,Iptc29|r.W&[#r(e9HDxQ3F!XWfR.Qj=QY~2}7+6k!t-Rh+w0%24jTKIScX+tOd)n9EO;#|UY2ETI652d4HCKk,]}WCT{b6Qb/+o:Ypnis^(TWB,&0PgS4v|Y:(jniH]n~F9>0;=Z>","D@]!Z!Aq&CT~I65kj*C`+MbQ4fZ=8@g*bEn1<lt7S(Pxfqh[^+TrO%!PQ*6w52e(<-ShF4Fg/)=mv|i5D]Z},G+80g$=xI<Y~H]6LAbXY47CXDB6m-:;2,ggz,wz$RF/0I$AQ/UBsZ^e5+`Usx+zY:#/;EtTKIScDCqHcG!z.(","TrFq!{I:fr5;Rk#E2AM[0/vspbk$9fD]ZG:F~4UjhA^qTlY1.+Db3&(xLhkD}.B{.T&!;$v|5=^/&b*fi)Y#4Bloz3+6k!^f9&@/n~F9%0~PgbDC@g!gzH|<~jSG29Yd,aCpzN;@iH3OB`G!Rr@vaXX<lamnhFZ7>rh~W0d0GR","D@!e4-ShP2Be5T2rq(tGv[q#tqie{3$=]nqY!$hTDxjs[jbIr1G]B<X9{T0DDxjIXGL]j]TZXeM~S5C45;TI4E-Y%~n1:bBpI/U3Ll+mhqi<]Q}=7(FBCP]TDEjM@e9]kK/7g)rTI1/~:6)0xqh[^Kh0TngYn7Lw+M}=~4F`%<",">0K#[TS`eg<CzLZ/Y`d:iFqOo>Q7QCv<c$84wCb4FhD}FvRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>","bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8WZ^f0gpW+q=B0YD5::6$!nsj$akOBBM}@qaqD|kc+U=}pe!3T2T5a-bgQoK-5^b%","|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG",";t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6Z#)N<m.)zMqvKZj&r/*%giMdhYBAb/ACpK=w*AO=TF!z)S;iXNE]8w>9qe-L5`Hr-xY<!1[DbHjs]GpmOF6Z-31{#,0v;EKQ/ZIfdT1LX#Pr``dDEEOlx^{rr","t-9`n$BgQqLl>R%b+}ckp]LEoO}QdR=K}}<]vY{QF6mDIt`>a=X!T,CGT@-2`3KY=PKIe:]8(-0j1w7f(gt*=biasjLl>eR)Rsn%hRft^0Nw1]o3T[&47CiAg0N*jbias:D=)%|));H)hB5imP]$R+LA9gB|Ta}1lA]&l)QPmK","xm`htGXmq%iUNT9BdCw(x`;{,d=,polA]&l2!1vK&SxP(!dt|ihhTZXYZO>`+6<;ajp}%qg*%p$.&<=XKZi-+G1&DYPBZEI)UO-P+M.r4fY9YGW7bs-.&UWiD-O=@q0<I`;e%S^>:>I@-8}P$,YM71#m-bmb8<>avD:(cGZC5!","p]LEoBdCw(+69c.CE`ZIgsI]Mb83vEjDS8}t|Ne#;hlo+2z^$]f@15Nf9&((0%L^gTEb8e<f8e:G#{3[8h>[d0%aN+DP,r,jniH]0/MRQbROFw&H=}>G]bA9$cvp.9&m914CT3px!P!7lRcMzr%BU[f3i4}lRi#]iMdhY~=zF%","XB7}wx~#,j.|Az4r4l8tvKZj&r/*%giMdhY)UYB,ebokrat1{UB`5!#b8KqRDxjHXF8vxvi>Y]sP4<(oex21}LA|a;Be[{92!WFdDsrq$/<DO^PgGZ9Ps+[S+fr9m-)Lr!g(r]21-TX.^F=<&G~/igWtR5F(<p|;6K>T8x~]w[","/]L6/1zCtxKZi0A2AwGDE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&","9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.xXH+0/WTP(P>YpiS-Ce+4es}6n;@n!6Br%}(8d3Ikc53b#`Y.k!+HmB+1iegLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mF","E&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E]d`DmZ3t+rrO+","~]Z.<8R(6ZCgC~~vRd[>bgQoK-5^.B}]5-xPzP`IxXc3If96U]P9XrZ.ABmpLdKH{07NhKT{G$}0CLzQCwj-fjniH5/7C>(1^#kd^)ZkZqog+.TZ}EM>:+M6|m<7@j<|v[(U7W,2~*r-.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQ","Sirb=X2KB&9#.NU3E]d`DmZ3t+rrO+~]Z.<8R(6ZCgC~~vRd[>","bgQoK-5^b%|{<Qhe>Pl+gLRMHU7)sEI5C3AA@9Gq.x[@Ezj4mFE&&8<687YG;t3Z[}P[kQSirb=X2KB&9#.NU3E2,o"};
+local xll={122,17233,246,0,226,131,74,15,226,123,100,231,74,28,226,251,224,0,224,1,224,2,224,3,224,4,224,5,226,128,224,6,100,65,224,7,224,8,53,189,224,9,224,10,100,92,224,11,224,12,224,13,226,202,224,14,224,15,224,16,224,17,74,159,224,18,226,178,224,19,100,195,224,20,226,199,224,21,100,201,224,22,226,172,224,23,224,24,74,102,224,25,224,26,100,253,224,27,53,31,224,28,224,29,224,30,74,160,224,31,100,182,224,32,224,33,224,34,74,103,224,35,224,36,100,185,224,37,224,38,53,42,224,39,53,125,224,40,74,209,224,41,224,42,226,40,224,43,74,136,224,44,226,10,224,45,224,46,224,47,53,66,224,48,224,49,53,192,224,50,226,222,224,51,74,204,224,52,53,157,224,53,224,54,224,55,74,3,224,56,224,57,224,58,74,80,224,59,224,60,224,61,224,62,100,1,224,63,226,114,224,64,226,110,224,65,53,54,224,66,74,175,224,67,53,18,224,68,224,69,224,70,224,71,74,110,224,72,224,73,226,139,224,74,224,75,53,15,224,76,100,21,224,77,53,191,224,78,53,55,224,79,224,80,100,167,224,81,224,82,224,83,53,161,224,84,226,218,224,85,53,200,224,86,224,87,74,124,224,88,74,155,224,89,224,90,53,28,224,91,74,159,224,92,224,93,224,94,224,95,74,27,224,96,224,97,224,98,224,99,74,133,224,100,224,101,226,174,224,102,53,178,224,103,100,5,224,104,74,25,224,105,100,105,224,106,53,13,224,107,224,108,53,92,224,109,74,233,224,110,74,60,224,111,224,112,74,181,224,113,226,207,224,114,224,115,224,116,100,88,224,117,224,118,224,119,224,120,100,14,224,121,224,122,74,50,224,123,224,124,224,125,224,126,100,79,224,127,224,128,226,168,224,129,224,130,53,166,224,131,226,27,224,132,226,168,224,133,226,35,224,134,224,135,224,136,100,32,224,137,74,59,224,138,224,139,74,198,224,140,224,141,224,142,53,129,224,143,100,68,224,144,74,169,224,145,224,146,100,90,224,147,53,189,224,148,74,44,224,149,53,183,224,150,226,237,224,151,226,72,224,152,74,16,224,153,53,132,224,154,224,155,100,1,224,156,224,157,224,158,53,62,224,159,224,160,53,53,224,161,224,162,74,224,224,163,224,164,53,108,224,165,224,166,226,62,224,167,224,168,100,23,224,169,53,68,224,170,100,161,224,171,224,172,74,89,224,173,226,126,224,174,224,175,224,176,100,170,224,177,100,44,224,178,224,179,74,11,224,180,224,181,224,182,53,158,224,183,226,39,224,184,53,206,224,185,226,8,224,186,224,187,74,173,224,188,224,189,53,91,224,190,100,90,224,191,226,20,224,192,224,193,224,194,74,127,224,195,224,196,74,226,224,197,74,2,86,198,53,141,195,1,226,151,241,0,74,43,24,0,176,0,74,8,53,254,100,161,100,146,226,221};
+local l_ll={};local _l=0;local OOIO=1;local I_O=true;
+local Ol_=(function(IIO)local _l_l=0;for lII=3,#IIO do _l_l=(_l_l*31+IIO[lII]+17)%65536 end;return _l_l;end);
+if Ol_(xll)~=xll[2] then if ((1+1==2)and(3>1)) then while true do end end end;
+local OOll=(function(_OOO,lll_)local xI_={};for II_O=1,_OOO do end;return lll_ end);
+local O_Il=(function(___)local OlOO=string.len(___ or "");local _lIO=string.rep("\0",OlOO%16);return _lIO end);
+local l___=(function(IIO,lOOO)local vI_={};for lII=1,#lOOO do vI_[string.sub(lOOO,lII,lII)]=lII-1 end;local IOl={};for lII=1,#IIO,5 do local _l_l=0;for z_l=0,4 do local wO=string.sub(IIO,lII+z_l,lII+z_l);_l_l=_l_l*85+(vI_[wO] or 0) end;IOl[#IOl+1]=math.floor(_l_l/16777216)%256;IOl[#IOl+1]=math.floor(_l_l/65536)%256;IOl[#IOl+1]=math.floor(_l_l/256)%256;IOl[#IOl+1]=_l_l%256 end;for lII=1,l_IO do IOl[#IOl]=nil end;local _lOl={};for lII=1,#IOl do _lOl[lII]=string.char(IOl[lII]) end;return table.concat(_lOl) end);
+local qOl=(function() local __OI=0;for ll_I=0,56 do __OI=__OI+1 end;return __OI end);
+local OO_=(function(IIO,lOOO)local IOl={};local llIl=bit32 and bit32.bxor or function(l_I_,wl)local _l_l=0;local zIO=1;for z_=0,7 do local II=math.floor(l_I_/zIO)%2;local _IO_=math.floor(wl/zIO)%2;if II~=_IO_ then _l_l=_l_l+zIO end;zIO=zIO*2 end;return _l_l end;for lII=1,#IIO do local _l_l=string.byte(IIO,lII);local z_l=lOOO[((lII-1)%#lOOO)+1];IOl[lII]=string.char(llIl(_l_l,z_l)) end;return table.concat(IOl) end);
+local lOI_=getfenv and getfenv(0) or _ENV or {};
+local lO__=(function(v_I)local wIl={};for Ol_l,ll__ in pairs(v_I or {}) do wIl[#wIl+1]=true end;return #wIl end);
+local l_I=22972;
+local OI=36420;
+local OOl_="ABGGNK";
+local OOl=40959;
+local __l={};
+__l[224]=(function(OII)_l=_l+1;l_ll[_l]=lO_l[OII+1] end);
+__l[86]=(function(OII)local IIO={};for lII=_l-OII+1,_l do IIO[#IIO+1]=l_ll[lII] end;_l=_l-OII+1;l_ll[_l]=table.concat(IIO) end);
+__l[195]=(function(OII)l_ll[_l]=l___(l_ll[_l],_lOO) end);
+__l[241]=(function(OII)l_ll[_l]=OO_(l_ll[_l],OI_) end);
+__l[24]=(function(OII)local lOII=loadstring(l_ll[_l]);if lOII then if setfenv then pcall(setfenv,lOII,lOI_) end;lOII() end;_l=_l-1 end);
+__l[226]=(function(OII)if ((2+2)==5) then _l=_l+0 end end);
+__l[53]=(function(OII)local IIO=(OII*55+184)%4794;if (math.floor(3.7)==4) then l_ll[_l]=IIO end end);
+__l[74]=(function(OII)local IIO=string.rep("\0",OII%8);if ((#'')==1) then _l=_l+1 end end);
+__l[100]=(function(OII)local IIO={[OII]=OII*2};if ((#'')==1) then l_ll[_l]=IIO end end);
+__l[176]=(function(OII)I_O=false end);
+__l[246]=(function(OII)if ((type({})==('table'))) then lOI_=getfenv and getfenv(0) or _ENV or {} end end);
+__l[122]=(function(OII) end);
+if ((tostring(1)=='1')) then while I_O and OOIO<#xll do local IO_=xll[OOIO];local OII=xll[OOIO+1];OOIO=OOIO+2;if ((tostring(1)=='1')) then local IIO=__l[IO_];if IIO then IIO(OII) end end;end end;
+local OOIl=nil;
+local vOI=nil;
+local l_OO=nil;
+local _IIl=nil;
+local lOOI=nil;
+local q_l=nil;
+local l_=nil;
